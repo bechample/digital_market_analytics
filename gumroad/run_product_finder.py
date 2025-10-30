@@ -34,120 +34,27 @@ from urllib.parse import urljoin, urlparse, urlunparse, parse_qs, urlencode
 
 from playwright.async_api import async_playwright, Page, Response
 from fake_useragent import UserAgent
-from src.utils import SlowDownException
+from src.utils import SlowDownException, CrawlDatabase, normalize_url, is_allowed_host
 
 
-CODECANYON_HOST = "codecanyon.net"
-BASE = f"https://{CODECANYON_HOST}"
-ITEM_LINK_RE = re.compile(r"^/item/[^/]+/\d+/?$")
+TARGET_HOST = "gumroad.com"
+BASE = f"https://{TARGET_HOST}"
+ITEM_LINK_RE = re.compile(r"^/l/[^/?#]+/?$")
+# Allow Gumroad listing/category pages. Exclude item pages under /l/.
+# Matches:
+# - /discover, /popular, /search, /new (optionally with extra segments)
+# - Multi-segment taxonomy like /software-development/app-development/react-native
 LISTING_ALLOW_RE = re.compile(
-    r"^/(?:top-sellers|category/[^/].*|popular|search|collections/[^/].*|new)$"
+    r"^(?!/l/)(?:/(?:discover|popular|search|new)(?:/.*)?|/(?:[a-z0-9-]+/){1,}[a-z0-9-]+/?$)"
 )
 
-def normalize_url(u: str) -> str:
-    """Normalize URLs by stripping fragments and normalizing scheme/host."""
-    p = urlparse(u)
-    scheme = "https"
-    netloc = CODECANYON_HOST
-    path = p.path
-    query = p.query
-    # Remove Google Analytics/utm params
-    if query:
-        q = parse_qs(query, keep_blank_values=True)
-        q = {k: v for k, v in q.items() if not k.lower().startswith("utm_")}
-        query = urlencode(q, doseq=True)
-    return urlunparse((scheme, netloc, path, "", "", "")) if not query else urlunparse((scheme, netloc, path, "", query, ""))
+ 
 
 
-class CrawlDatabase:
-    """Thread-safe SQLite database for crawl state."""
-    
-    def __init__(self, db_path: str = "crawl_state.db"):
-        self.db_path = db_path
-        self.conn = sqlite3.connect(db_path, check_same_thread=False, isolation_level=None)
-        self.conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging for concurrency
-        self._init_tables()
-    
-    def _init_tables(self):
-        """Initialize database tables."""
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS visited_listings (
-                url TEXT PRIMARY KEY,
-                visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS to_visit_queue (
-                url TEXT PRIMARY KEY,
-                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS found_items (
-                url TEXT PRIMARY KEY,
-                found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-    
-    def add_visited(self, url: str):
-        """Add URL to visited list."""
-        self.conn.execute("INSERT OR IGNORE INTO visited_listings (url) VALUES (?)", (url,))
-    
-    def is_visited(self, url: str) -> bool:
-        """Check if URL has been visited."""
-        cursor = self.conn.execute("SELECT 1 FROM visited_listings WHERE url = ? LIMIT 1", (url,))
-        return cursor.fetchone() is not None
-    
-    def get_all_visited(self) -> Set[str]:
-        """Get all visited URLs."""
-        cursor = self.conn.execute("SELECT url FROM visited_listings")
-        return {row[0] for row in cursor.fetchall()}
-    
-    def add_to_queue(self, url: str):
-        """Add URL to visit queue."""
-        self.conn.execute("INSERT OR IGNORE INTO to_visit_queue (url) VALUES (?)", (url,))
-    
-    def remove_from_queue(self, url: str):
-        """Remove URL from queue."""
-        self.conn.execute("DELETE FROM to_visit_queue WHERE url = ?", (url,))
-    
-    def get_queue(self) -> list:
-        """Get all URLs in queue."""
-        cursor = self.conn.execute("SELECT url FROM to_visit_queue ORDER BY added_at")
-        return [row[0] for row in cursor.fetchall()]
-    
-    def add_item(self, url: str):
-        """Add found item."""
-        self.conn.execute("INSERT OR IGNORE INTO found_items (url) VALUES (?)", (url,))
-    
-    def is_item_found(self, url: str) -> bool:
-        """Check if item has been found."""
-        cursor = self.conn.execute("SELECT 1 FROM found_items WHERE url = ? LIMIT 1", (url,))
-        return cursor.fetchone() is not None
-    
-    def get_all_items(self) -> Set[str]:
-        """Get all found items."""
-        cursor = self.conn.execute("SELECT url FROM found_items")
-        return {row[0] for row in cursor.fetchall()}
-    
-    def export_to_csv(self, output: str):
-        """Export found items to CSV."""
-        cursor = self.conn.execute("SELECT url FROM found_items ORDER BY url")
-        items = [row[0] for row in cursor.fetchall()]
-        
-        with open(output, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["url"])
-            for item in items:
-                writer.writerow([item])
-    
-    def close(self):
-        """Close database connection."""
-        self.conn.close()
+ 
 
 
+ 
 
 
 async def extract_links(page: Page, base_url: str):
@@ -170,13 +77,14 @@ async def extract_links(page: Page, base_url: str):
             abs_url = urljoin(base_url, href)
             p = urlparse(abs_url)
             
-            # Only process CodeCanyon URLs
-            if p.netloc not in {CODECANYON_HOST, f"www.{CODECANYON_HOST}"}:
+            # Only process Gumroad URLs (root or any subdomain like username.gumroad.com)
+            if not is_allowed_host(p.netloc):
+                print(f"[debug] Skipping {abs_url} because it's not a Gumroad URL")
                 continue
             
             norm = normalize_url(abs_url)
             path = urlparse(norm).path
-            
+            print(path)
             if ITEM_LINK_RE.match(path):
                 item_links.add(norm)
             elif LISTING_ALLOW_RE.match(path):
@@ -241,7 +149,7 @@ async def extract_pagination_links(page: Page, base_url: str, max_pages: int) ->
                     abs_url = urljoin(base_url, href)
                     p = urlparse(abs_url)
                     
-                    if "page" in parse_qs(p.query) and p.netloc in {CODECANYON_HOST, f"www.{CODECANYON_HOST}"}:
+                    if "page" in parse_qs(p.query) and is_allowed_host(p.netloc):
                         norm = normalize_url(abs_url)
                         if urlparse(norm).path == base_path:
                             pagination_urls.add(norm)
@@ -335,7 +243,7 @@ async def worker(db: CrawlDatabase, playwright, delay: float, max_pages: int, wo
             
             # Get random URL from queue
             url = random.choice(to_visit)
-            
+            print(f"[worker-{worker_id}] Proccessing Queue item: {url}")
             # Check if already visited
             if db.is_visited(url):
                 db.remove_from_queue(url)
@@ -371,10 +279,7 @@ async def run_crawler(
     # Initialize database
     db = CrawlDatabase("data/crawl_state.db")
     
-    # Load existing items from CSV into database
-    existing_items = load_existing_items(output)
-    for item in existing_items:
-        db.add_item(item)
+
     
     print(f"[info] Starting with {len(db.get_all_items())} existing items")
     
@@ -414,13 +319,13 @@ def main():
     args = parser.parse_args()
     
     # Determine start URL
-    start_url = args.start_url or "https://codecanyon.net/top-sellers"
+    start_url = args.start_url or "https://gumroad.com/software-development"
     print(f"[info] Using start URL: {start_url}")
     
     # Basic host guardrail
     host = urlparse(start_url).netloc.lower()
-    if CODECANYON_HOST not in host:
-        print(f"Error: start-url must be on {CODECANYON_HOST}", file=sys.stderr)
+    if TARGET_HOST not in host:
+        print(f"Error: start-url must be on {TARGET_HOST}", file=sys.stderr)
         sys.exit(1)
     
     # Run the crawler
