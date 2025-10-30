@@ -2,3 +2,4 @@
 codecanyon/.DS_Store
 codecanyon/data
 fiverr/data
+codecanyon/src/__pycache__/*
