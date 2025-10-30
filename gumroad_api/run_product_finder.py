@@ -1,33 +1,153 @@
 import requests
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+import sqlite3
+import time
+import os
+from datetime import date
 
 
 
 # request urls like https://gumroad.com/products/search?&from=6
-MAX_ITEMS = 10
+MAX_ITEMS = 631127
 url = "https://gumroad.com/products/search?"
 # increment by 5 each round
-increment = 5
-i = 0
-while i < MAX_ITEMS:
-    i += increment
-    response = requests.get(url + f"&from={i}")
-    # Example response:
-    # {"total":631124,"tags_data":[{"key":"vrchat","doc_count":19202},{"key":"notion template","doc_count":10555},{"key":"vrchat asset","doc_count":8369},{"key":"free","doc_count":7366},{"key":"3d model","doc_count":6836},{"key":"notion","doc_count":6751},{"key":"blender","doc_count":6732},{"key":"vrchat avatar","doc_count":6271}],"filetypes_data":[{"key":"pdf","doc_count":181385},{"key":"zip","doc_count":154134},{"key":"mp4","doc_count":50156},{"key":"rar","doc_count":30382},{"key":"mp3","doc_count":24234},{"key":"png","doc_count":21266},{"key":"jpg","doc_count":16218},{"key":"mov","doc_count":15236}],"products":[{"id":"fl5GLgsjWD2CpuIRBA06Dw==","permalink":"GmsQY","name":"PES Master Plus","seller":{"id":"1203227966769","name":"PES Master","avatar_url":"https://public-files.gumroad.com/2l0ek1fgx7arcy6b3wzzi9ptl7xf","profile_url":"https://pesmaster.gumroad.com?recommended_by=search"},"ratings":{"count":872,"average":4.6},"thumbnail_url":"https://public-files.gumroad.com/9e28jofk164uljbab2hlypoc7u8y","native_type":"membership","quantity_remaining":null,"is_sales_limited":false,"price_cents":1500,"currency_code":"eur","is_pay_what_you_want":false,"url":"https://pesmaster.gumroad.com/l/GmsQY?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":"yearly","description":"Support PES Master and the Kit Creators while benefiting from a great set of exclusive site featu..."},{"id":"ooSU0_XwWRbrqdHpWHXrjw==","permalink":"gpcfp","name":"Live Futures Educational Platform","seller":{"id":"991122034705","name":"Simple Market Metrics","avatar_url":"https://public-files.gumroad.com/w3ock43zq1i1elzyhg70hxitlhyb","profile_url":"https://simplemarketmetrics.gumroad.com?recommended_by=search"},"ratings":{"count":22,"average":5.0},"thumbnail_url":"https://public-files.gumroad.com/2446vu51w9qfrjuikg37b9j68u0l","native_type":"membership","quantity_remaining":null,"is_sales_limited":false,"price_cents":9900,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://simplemarketmetrics.gumroad.com/l/gpcfp?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":"monthly","description":"⭐Live Futures Educational PlatformInstructor: RonPlatform: SMM IndicatorTraining Focus: Futures M..."},{"id":"es50lUxSaSahY0_w6F5Gfw==","permalink":"jeiyj","name":"SMM Ninja Trader Version","seller":{"id":"991122034705","name":"Simple Market Metrics","avatar_url":"https://public-files.gumroad.com/w3ock43zq1i1elzyhg70hxitlhyb","profile_url":"https://simplemarketmetrics.gumroad.com?recommended_by=search"},"ratings":{"count":7,"average":5.0},"thumbnail_url":"https://public-files.gumroad.com/435o9183ttemnbngsm0n45rd46xf","native_type":"digital","quantity_remaining":null,"is_sales_limited":false,"price_cents":9900,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://simplemarketmetrics.gumroad.com/l/jeiyj?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":null,"description":"NINJA TRADER VERSION IS NOW LIVE!!!⭐All The Same Benefits On Tradingview But Now For Ninja Trader..."},{"id":"BOzu3BoVHBTL0iVqbISO2w==","permalink":"TdVwG","name":"GeoImgr Pro Subscription","seller":{"id":"5118439057172","name":"GeoImgr","avatar_url":"https://public-files.gumroad.com/a5mfgm39vkje4u21ozpstzhtbyc3","profile_url":"https://geoimgr.gumroad.com?recommended_by=search"},"ratings":{"count":167,"average":4.8},"thumbnail_url":"https://public-files.gumroad.com/3lnlvx05aaw4pcqd5dq9fymxyxu9","native_type":"membership","quantity_remaining":null,"is_sales_limited":false,"price_cents":1290,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://geoimgr.gumroad.com/l/geoimgr?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":"monthly","description":"Geotagging solution with over 10 years of experience: Google Maps with best Google Place search t..."},{"id":"GX_BgMzKChBkD1TV9Ss8sA==","permalink":"LMdGL","name":"Armorsmith Designer","seller":{"id":"7697108330995","name":"The Armored Garage","avatar_url":"https://public-files.gumroad.com/ucn1ynnkfn7c86d7clbw4zrvqneh","profile_url":"https://thearmoredgarage.gumroad.com?recommended_by=search"},"ratings":{"count":495,"average":4.5},"thumbnail_url":"https://public-files.gumroad.com/9x43czhpl4rfxur2jdx7mugisujk","native_type":"digital","quantity_remaining":null,"is_sales_limited":false,"price_cents":4000,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://thearmoredgarage.gumroad.com/l/LMdGL?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":null,"description":"Armorsmith Designer is a tool for creating and constructing costumes with ease. With Armorsmith, ..."},{"id":"KNuxNDNruyWBnh9_U9qHVg==","permalink":"fcxjqn","name":"RED-E Society","seller":{"id":"4355304604146","name":"Mark N. Rogers, MBA","avatar_url":"https://public-files.gumroad.com/qffmn5ht5wupshso7auz1egwns04","profile_url":"https://rogers1906.gumroad.com?recommended_by=search"},"ratings":{"count":8,"average":5.0},"thumbnail_url":"https://public-files.gumroad.com/1cnnasl1y0m1tq42ul3j1qsn3tx6","native_type":"membership","quantity_remaining":null,"is_sales_limited":false,"price_cents":8500,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://rogers1906.gumroad.com/l/fcxjqn?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":"monthly","description":"The RED-E Society: Where Faith Meets Financial MasteryWelcome to The RED-E Society, a one-of-a-ki..."},{"id":"prUDx_FJG8-TyBEcyAFCuQ==","permalink":"hvfvj","name":"SpotiDown Premium License Key","seller":{"id":"4189188067533","name":"SpotiDown","avatar_url":"https://public-files.gumroad.com/74gqgu667wzfjaivzpclle7llzt1","profile_url":"https://spotidown.gumroad.com?recommended_by=search"},"ratings":{"count":45,"average":3.6},"thumbnail_url":"https://public-files.gumroad.com/700j7sp3rkn3j1956jk5uu0yvuym","native_type":"digital","quantity_remaining":null,"is_sales_limited":false,"price_cents":2000,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://spotidown.gumroad.com/l/premiumkey?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":null,"description":"🎶 Enhance Your Music Organization with SpotiDown Premium!Organize and back up your favorite track..."},{"id":"qHLpwA4XfPK1EB9bADjpmw==","permalink":"umnLH","name":"Hacking with Swift+","seller":{"id":"1196435742118","name":"Paul Hudson","avatar_url":"https://public-files.gumroad.com/ade0ybray6xjr3ejbm88lcokj5kj","profile_url":"https://twostraws.gumroad.com?recommended_by=search"},"ratings":{"count":290,"average":4.9},"thumbnail_url":"https://public-files.gumroad.com/9vgswqyp2vqf34ppxip87lp00e9s","native_type":"membership","quantity_remaining":null,"is_sales_limited":false,"price_cents":2000,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://twostraws.gumroad.com/l/hws-subscription?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":"monthly","description":"The ultimate investment for your Swift programming career!Hacking with Swift+ is a subscription s..."},{"id":"zg5xkFpzZPTYQa2LQWeGww==","permalink":"qybqg","name":"🎯 Secret Society Basic Subscription","seller":{"id":"6215715308981","name":"Zherka Entertainment Inc.","avatar_url":"https://public-files.gumroad.com/v0od98qdbvrfn0z84y9lomvu6at3","profile_url":"https://thezherkaofficial.gumroad.com?recommended_by=search"},"ratings":{"count":144,"average":4.8},"thumbnail_url":"https://public-files.gumroad.com/767yh80axd7b5kqyxhf77aafd3x5","native_type":"membership","quantity_remaining":null,"is_sales_limited":false,"price_cents":4600,"currency_code":"usd","is_pay_what_you_want":false,"url":"https://thezherkaofficial.gumroad.com/l/DateIQBasic?layout=discover\u0026recommended_by=search","duration_in_months":null,"recurrence":"monthly","description":"Exclusive Secret Society MembershipGain Access to the coveted Secret Society Discord Server \u0026amp;..."}]}
-    print(response.json())
+increment = 9
 
-    #store products in threadsafe sqlite database in folder data
-    # save all attributes from json response to database   
-    import sqlite3
-    conn = sqlite3.connect("data/products.db")
-    cursor = conn.cursor()
-    cursor.execute("CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT, url TEXT, permalink TEXT, seller_id TEXT, seller_name TEXT, seller_avatar_url TEXT, seller_profile_url TEXT, ratings_count INTEGER, ratings_average REAL, thumbnail_url TEXT, native_type TEXT, quantity_remaining INTEGER, is_sales_limited BOOLEAN, price_cents INTEGER, currency_code TEXT, is_pay_what_you_want BOOLEAN, duration_in_months INTEGER, recurrence TEXT, description TEXT)")
+# parse command line arg for number of threads
+parser = argparse.ArgumentParser(description="Gumroad products crawler")
+parser.add_argument(
+    "--no_of_threads",
+    type=int,
+    default=1,
+    help="Number of threads to use for fetching pages (default: 1)",
+)
+args = parser.parse_args()
+no_of_threads = max(1, args.no_of_threads)
 
+def fetch_and_store(offset: int):
+    """Fetch a page and store products into SQLite within the worker thread."""
+    print(f"Fetching page for offset {offset}")
+    response_json = requests.get(url + f"&from={offset}").json()
 
-    for product in response.json()["products"]:
-        # avoid url duplication
-        if cursor.execute("SELECT COUNT(*) FROM products WHERE url = ?", (product["url"],)).fetchone()[0] > 0:
-            continue
+    conn = sqlite3.connect("data/products.db", timeout=30)
+    try:
+        cursor = conn.cursor()
+        # set pragmas for concurrency similar to codecanyon project
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        # ensure table exists (idempotent)
+        cursor.execute("CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT, url TEXT, permalink TEXT, seller_id TEXT, seller_name TEXT, seller_avatar_url TEXT, seller_profile_url TEXT, ratings_count INTEGER, ratings_average REAL, thumbnail_url TEXT, native_type TEXT, quantity_remaining INTEGER, is_sales_limited BOOLEAN, price_cents INTEGER, currency_code TEXT, is_pay_what_you_want BOOLEAN, duration_in_months INTEGER, recurrence TEXT, description TEXT, snapshot_date TEXT)")
+        # for existing DBs, attempt to add snapshot_date column if missing
+        try:
+            cursor.execute("ALTER TABLE products ADD COLUMN snapshot_date TEXT")
+        except sqlite3.OperationalError:
+            pass
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS visited_urls (url TEXT NOT NULL, visited_date TEXT NOT NULL, PRIMARY KEY (url, visited_date))"
+        )
 
-        cursor.execute("INSERT OR IGNORE INTO products (id, name, url, permalink, seller_id, seller_name, seller_avatar_url, seller_profile_url, ratings_count, ratings_average, thumbnail_url, native_type, quantity_remaining, is_sales_limited, price_cents, currency_code, is_pay_what_you_want, url, duration_in_months, recurrence, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (product["id"], product["name"], product["url"], product["permalink"], product["seller"]["id"], product["seller"]["name"], product["seller"]["avatar_url"], product["seller"]["profile_url"], product["ratings"]["count"], product["ratings"]["average"], product["thumbnail_url"], product["native_type"], product["quantity_remaining"], product["is_sales_limited"], product["price_cents"], product["currency_code"], product["is_pay_what_you_want"], product["url"], product["duration_in_months"], product["recurrence"], product["description"]))
-    conn.commit()
-    conn.close()
+        # simple retry loop to handle occasional SQLITE_BUSY during concurrent writes
+        today_str = date.today().isoformat()
+
+        def try_insert(product):
+            attempts = 0
+            while True:
+                try:
+                    # skip if this URL was already visited today
+                    already_today = cursor.execute(
+                        "SELECT 1 FROM visited_urls WHERE url = ? AND visited_date = ?",
+                        (product["url"], today_str),
+                    ).fetchone()
+                    if already_today:
+                        return
+
+                    # upsert into products (still useful for historical storage)
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO products (id, name, url, permalink, seller_id, seller_name, seller_avatar_url, seller_profile_url, ratings_count, ratings_average, thumbnail_url, native_type, quantity_remaining, is_sales_limited, price_cents, currency_code, is_pay_what_you_want, url, duration_in_months, recurrence, description, snapshot_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            product["id"],
+                            product["name"],
+                            product["url"],
+                            product["permalink"],
+                            product["seller"]["id"],
+                            product["seller"]["name"],
+                            product["seller"]["avatar_url"],
+                            product["seller"]["profile_url"],
+                            product["ratings"]["count"],
+                            product["ratings"]["average"],
+                            product["thumbnail_url"],
+                            product["native_type"],
+                            product["quantity_remaining"],
+                            product["is_sales_limited"],
+                            product["price_cents"],
+                            product["currency_code"],
+                            product["is_pay_what_you_want"],
+                            product["url"],
+                            product["duration_in_months"],
+                            product["recurrence"],
+                            product["description"],
+                            today_str,
+                        ),
+                    )
+
+                    # record that we visited this URL today
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO visited_urls (url, visited_date) VALUES (?, ?)",
+                        (product["url"], today_str),
+                    )
+                    break
+                except sqlite3.OperationalError as e:
+                    # backoff on database is locked
+                    if ("locked" in str(e).lower() or "busy" in str(e).lower()) and attempts < 5:
+                        attempts += 1
+                        time.sleep(0.1 * attempts)
+                        continue
+                    raise
+
+        # begin a short transaction and commit once
+        begin_attempts = 0
+        while True:
+            try:
+                cursor.execute("BEGIN IMMEDIATE")
+                break
+            except sqlite3.OperationalError as e:
+                if ("locked" in str(e).lower() or "busy" in str(e).lower()) and begin_attempts < 5:
+                    begin_attempts += 1
+                    time.sleep(0.1 * begin_attempts)
+                    continue
+                raise
+
+        try:
+            for product in response_json.get("products", []):
+                try_insert(product)
+            commit_attempts = 0
+            while True:
+                try:
+                    conn.commit()
+                    break
+                except sqlite3.OperationalError as e:
+                    if ("locked" in str(e).lower() or "busy" in str(e).lower()) and commit_attempts < 5:
+                        commit_attempts += 1
+                        time.sleep(0.1 * commit_attempts)
+                        continue
+                    raise
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
+
+offsets = list(range(increment, MAX_ITEMS + 1, increment))
+
+os.makedirs("data", exist_ok=True)
+
+if no_of_threads == 1:
+    for off in offsets:
+        fetch_and_store(off)
+else:
+    with ThreadPoolExecutor(max_workers=no_of_threads) as executor:
+        list(executor.map(fetch_and_store, offsets))
+
+    
