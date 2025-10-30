@@ -371,10 +371,6 @@ async def run_crawler(
     # Initialize database
     db = CrawlDatabase("data/crawl_state.db")
     
-    # Load existing items from CSV into database
-    existing_items = load_existing_items(output)
-    for item in existing_items:
-        db.add_item(item)
     
     print(f"[info] Starting with {len(db.get_all_items())} existing items")
     
