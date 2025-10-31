@@ -3,3 +3,7 @@ codecanyon/.DS_Store
 codecanyon/data
 fiverr/data
 codecanyon/src/__pycache__/*
+gumroad_api/data/products.db
+gumroad_api/data/products.db-shm
+gumroad_api/data/products.db-wal
+gumroad_api/data/too_much_results.json
